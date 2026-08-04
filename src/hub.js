@@ -4,41 +4,21 @@ const net = require('net');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const express = require('express');
+const { readPluginManifest } = require('./manifest');
+const { Registry } = require('./registry');
 
 const DEFAULT_PLUGINS_DIR = path.join(__dirname, '..', 'plugins');
 const DEFAULT_DATA_DIR = path.join(__dirname, '..', 'data', 'hub');
 const DEFAULT_SDK_PATH = path.join(__dirname, '..', 'sdk', 'index.js');
 const HUB_PORT = Number(process.env.USAGI_HUB_PORT) || 5178;
-
-function validateManifest(manifest) {
-  if (!manifest || typeof manifest !== 'object') {
-    return 'manifest must be an object';
-  }
-  if (typeof manifest.id !== 'string' || !manifest.id) {
-    return 'manifest.id (string) is required';
-  }
-  if (typeof manifest.name !== 'string' || !manifest.name) {
-    return 'manifest.name (string) is required';
-  }
-  if (typeof manifest.version !== 'string' || !manifest.version) {
-    return 'manifest.version (string) is required';
-  }
-  if (!Number.isInteger(manifest.sdkVersion)) {
-    return 'manifest.sdkVersion (integer) is required';
-  }
-  const command = manifest.entry && manifest.entry.command;
-  if (!Array.isArray(command) || command.length === 0 || !command.every((c) => typeof c === 'string')) {
-    return 'manifest.entry.command (non-empty string array) is required';
-  }
-  const healthPath = manifest.health && manifest.health.path;
-  if (typeof healthPath !== 'string' || !healthPath.startsWith('/')) {
-    return 'manifest.health.path (string starting with /) is required';
-  }
-  return null;
-}
+const RAW = 'https://raw.githubusercontent.com';
 
 function log(...args) {
   console.log('[usagi]', ...args);
+}
+
+function sendError(res, error) {
+  res.status(500).json({ ok: false, error: error.message, reason: error.reason || null });
 }
 
 function pickFreePort() {
@@ -81,22 +61,43 @@ class PluginManager {
   }
 
   scan() {
-    for (const name of fs.readdirSync(this.pluginsDir)) {
+    let names;
+    try {
+      names = fs.readdirSync(this.pluginsDir);
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      if (name.startsWith('.')) {
+        continue;
+      }
       const dir = path.join(this.pluginsDir, name);
-      const manifestPath = path.join(dir, 'plugin.json');
-      if (!fs.statSync(dir).isDirectory() || !fs.existsSync(manifestPath)) {
+      let stat;
+      try {
+        stat = fs.statSync(dir);
+      } catch {
+        continue;
+      }
+      if (!stat.isDirectory() || !fs.existsSync(path.join(dir, 'plugin.json'))) {
         continue;
       }
       let manifest;
       try {
-        manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        manifest = readPluginManifest(dir);
       } catch (error) {
-        log(`skipping ${name}: invalid plugin.json (${error.message})`);
+        log(`skipping ${name}: ${error.message}`);
         continue;
       }
-      const manifestError = validateManifest(manifest);
-      if (manifestError) {
-        log(`skipping ${name}: ${manifestError}`);
+      const existing = this.plugins.get(manifest.id);
+      if (existing) {
+        if (existing.dir === dir && existing.manifest.version === manifest.version) {
+          continue;
+        }
+        existing.dir = dir;
+        existing.manifest = manifest;
+        if (!existing.proc) {
+          existing.status = existing.status === 'crashed' ? 'crashed' : 'stopped';
+        }
         continue;
       }
       this.plugins.set(manifest.id, {
@@ -234,6 +235,11 @@ class PluginManager {
     }
   }
 
+  async remove(id) {
+    await this.stop(id);
+    this.plugins.delete(id);
+  }
+
   appendRecord(pluginId, { schema, input, output }) {
     if (typeof schema !== 'string' || !schema) {
       throw new Error('schema is required');
@@ -306,9 +312,15 @@ function createHub(options = {}) {
     pluginsDir: options.pluginsDir || DEFAULT_PLUGINS_DIR,
     dataDir: options.dataDir || DEFAULT_DATA_DIR
   });
+  const registry = new Registry({
+    pluginsDir: manager.pluginsDir,
+    cacheDir: options.registryCacheDir,
+    stateFile: options.registryStateFile
+  });
   manager.scan();
 
   const app = express();
+  app.use(express.json({ limit: '2mb' }));
 
   app.get('/api/plugins', (_req, res) => {
     res.json({ ok: true, plugins: manager.list() });
@@ -332,6 +344,112 @@ function createHub(options = {}) {
     }
   });
 
+  app.get('/api/repos', async (_req, res) => {
+    try {
+      res.json({ ok: true, repos: await registry.listRepos() });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.get('/api/repos/:owner/:repo', async (req, res) => {
+    try {
+      res.json({ ok: true, repo: await registry.repoDetail(req.params.owner, req.params.repo) });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post('/api/repos/:owner/:repo/install', async (req, res) => {
+    try {
+      const result = await registry.install({
+        owner: req.params.owner,
+        repo: req.params.repo,
+        tag: (req.body && req.body.tag) || undefined
+      });
+      manager.scan();
+      res.json({ ok: true, ...result });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post('/api/repos/:owner/:repo/update', async (req, res) => {
+    try {
+      const record = registry.state.repos[req.params.repo];
+      if (record && record.pluginId) {
+        await manager.stop(record.pluginId);
+      }
+      const result = await registry.update({
+        owner: req.params.owner,
+        repo: req.params.repo,
+        tag: (req.body && req.body.tag) || undefined
+      });
+      manager.scan();
+      res.json({ ok: true, ...result });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post('/api/repos/:owner/:repo/repair', async (req, res) => {
+    try {
+      const record = registry.state.repos[req.params.repo];
+      if (record && record.pluginId) {
+        await manager.stop(record.pluginId);
+      }
+      const result = await registry.repair({
+        owner: req.params.owner,
+        repo: req.params.repo
+      });
+      manager.scan();
+      res.json({ ok: true, ...result });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post('/api/repos/:owner/:repo/uninstall', async (req, res) => {
+    try {
+      const record = registry.state.repos[req.params.repo];
+      const result = await registry.uninstall({
+        owner: req.params.owner,
+        repo: req.params.repo
+      });
+      if (record && record.pluginId) {
+        await manager.remove(record.pluginId);
+      }
+      manager.scan();
+      res.json({ ok: true, ...result });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.get('/api/repos/:owner/:repo/raw/:tag/*', async (req, res) => {
+    try {
+      const { owner, repo, tag } = req.params;
+      const filePath = String(req.params[0] || '').replace(/^\/+/, '');
+      if (!filePath || filePath.split(/[\\/]/).includes('..')) {
+        res.status(400).json({ ok: false, error: 'invalid path' });
+        return;
+      }
+      const url = `${RAW}/${owner}/${repo}/${encodeURIComponent(tag)}/${filePath}`;
+      const upstream = await fetch(url);
+      if (!upstream.ok) {
+        res.status(upstream.status).json({ ok: false, error: `upstream ${upstream.status}` });
+        return;
+      }
+      const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
+      const buffer = Buffer.from(await upstream.arrayBuffer());
+      res.set('content-type', contentType);
+      res.set('cache-control', 'public, max-age=3600');
+      res.send(buffer);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
   app.get('/api/history', (_req, res) => {
     res.json({ ok: true, history: manager.readAllHistory() });
   });
@@ -349,7 +467,7 @@ function createHub(options = {}) {
     next();
   }
 
-  app.use('/bus', express.json({ limit: '2mb' }), requirePlugin);
+  app.use('/bus', requirePlugin);
 
   app.post('/bus/ready', (req, res) => {
     req.runtime.sdkReady = true;

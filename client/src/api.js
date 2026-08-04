@@ -25,5 +25,29 @@ export const api = {
   },
   history() {
     return request('/api/history');
+  },
+  repos() {
+    return request('/api/repos');
+  },
+  repo(owner, repo) {
+    return request(`/api/repos/${owner}/${repo}`);
+  },
+  installRepo(owner, repo, tag) {
+    return request(`/api/repos/${owner}/${repo}/install`, {
+      method: 'POST',
+      body: JSON.stringify({ tag })
+    });
+  },
+  updateRepo(owner, repo, tag) {
+    return request(`/api/repos/${owner}/${repo}/update`, {
+      method: 'POST',
+      body: JSON.stringify({ tag })
+    });
+  },
+  repairRepo(owner, repo) {
+    return request(`/api/repos/${owner}/${repo}/repair`, { method: 'POST' });
+  },
+  uninstallRepo(owner, repo) {
+    return request(`/api/repos/${owner}/${repo}/uninstall`, { method: 'POST' });
   }
 };

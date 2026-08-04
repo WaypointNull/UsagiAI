@@ -8,3 +8,8 @@ node_modules/
 dist/
 release/
 *.log
+
+# Store state: downloaded repo copies, installed-plugin metadata and copies
+src/registryCache/
+src/plugins.json
+plugins/*/

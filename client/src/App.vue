@@ -5,6 +5,7 @@ import { applyTheme, DEFAULT_THEME } from './theme';
 import PluginList from './components/PluginList.vue';
 import PluginFrame from './components/PluginFrame.vue';
 import HistoryPanel from './components/HistoryPanel.vue';
+import StorePanel from './components/StorePanel.vue';
 import TabBar from './components/TabBar.vue';
 
 const plugins = ref([]);
@@ -13,7 +14,7 @@ const activeKey = ref(null);
 let timer = null;
 
 const activeTheme = computed(() => {
-  if (activeKey.value === 'history') {
+  if (activeKey.value === 'history' || activeKey.value === 'store') {
     return DEFAULT_THEME;
   }
   const tab = tabs.value.find((t) => t.key === activeKey.value);
@@ -36,6 +37,8 @@ const activePluginId = computed(() => {
 const pluginTabs = computed(() => tabs.value.filter((t) => t.kind === 'plugin'));
 
 const historyTabOpen = computed(() => tabs.value.some((t) => t.kind === 'history'));
+
+const storeTabOpen = computed(() => tabs.value.some((t) => t.kind === 'store'));
 
 async function refresh() {
   try {
@@ -97,6 +100,16 @@ function openHistory() {
   activeKey.value = 'history';
 }
 
+function openStore() {
+  const existing = tabs.value.find((t) => t.key === 'store');
+  if (existing) {
+    activeKey.value = 'store';
+    return;
+  }
+  tabs.value.push({ key: 'store', kind: 'store', label: 'Store' });
+  activeKey.value = 'store';
+}
+
 function selectTab(key) {
   activeKey.value = key;
 }
@@ -127,9 +140,11 @@ onUnmounted(() => clearInterval(timer));
       :plugins="plugins"
       :active-id="activePluginId"
       :history-active="activeKey === 'history'"
+      :store-active="activeKey === 'store'"
       @toggle="toggle"
       @show="show"
       @history="openHistory"
+      @store="openStore"
     />
     <div class="flex min-w-0 min-h-0 flex-1 flex-col">
       <TabBar v-if="tabs.length" :tabs="tabs" :active-key="activeKey" @select="selectTab" @close="closeTab" />
@@ -141,6 +156,7 @@ onUnmounted(() => clearInterval(timer));
           :plugin="tab"
         />
         <HistoryPanel v-if="historyTabOpen" v-show="activeKey === 'history'" />
+        <StorePanel v-if="storeTabOpen" v-show="activeKey === 'store'" @installed="refresh" />
       </template>
       <div v-else class="theme-transition flex flex-1 items-center justify-center text-sm text-muted-foreground">
         Select a tool from the sidebar.

@@ -2,15 +2,16 @@
 import Button from './ui/Button.vue';
 import Badge from './ui/Badge.vue';
 import Separator from './ui/Separator.vue';
-import { History, Play, Square } from '@lucide/vue';
+import { History, Play, Square, Store } from '@lucide/vue';
 
 defineProps({
   plugins: { type: Array, default: () => [] },
   activeId: { type: String, default: null },
-  historyActive: { type: Boolean, default: false }
+  historyActive: { type: Boolean, default: false },
+  storeActive: { type: Boolean, default: false }
 });
 
-const emit = defineEmits(['toggle', 'show', 'history']);
+const emit = defineEmits(['toggle', 'show', 'history', 'store']);
 
 function statusVariant(status) {
   if (status === 'running') {
@@ -56,6 +57,15 @@ function statusVariant(status) {
       <Button
         variant="ghost"
         class="w-full justify-start"
+        :class="storeActive ? 'border border-ring bg-accent text-accent-foreground' : ''"
+        @click="emit('store')"
+      >
+        <Store :size="16" />
+        Store
+      </Button>
+      <Button
+        variant="ghost"
+        class="mt-1 w-full justify-start"
         :class="historyActive ? 'border border-ring bg-accent text-accent-foreground' : ''"
         @click="emit('history')"
       >
