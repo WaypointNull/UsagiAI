@@ -1,0 +1,33 @@
+{
+  "name": "usagi-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local hub for AI plugins.",
+  "main": "src/main.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/hub.js",
+    "dev": "electron .",
+    "build": "vite build --config client/vite.config.mjs",
+    "preview": "vite preview --config client/vite.config.mjs",
+    "client:dev": "vite --config client/vite.config.mjs"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.28.0",
+    "clsx": "^2.1.1",
+    "express": "^4.21.2",
+    "tailwind-merge": "^3.6.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "autoprefixer": "^10.5.4",
+    "electron": "^43.2.0",
+    "postcss": "^8.5.25",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.2.0",
+    "vue": "^3.5.40"
+  }
+}
