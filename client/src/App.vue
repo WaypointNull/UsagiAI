@@ -114,6 +114,14 @@ function selectTab(key) {
   activeKey.value = key;
 }
 
+function reorderTabs(from, to) {
+  if (from === to || from < 0 || to < 0 || from >= tabs.value.length || to >= tabs.value.length) {
+    return;
+  }
+  const [moved] = tabs.value.splice(from, 1);
+  tabs.value.splice(to, 0, moved);
+}
+
 function closeTab(key) {
   const idx = tabs.value.findIndex((t) => t.key === key);
   if (idx === -1) {
@@ -147,7 +155,7 @@ onUnmounted(() => clearInterval(timer));
       @store="openStore"
     />
     <div class="flex min-w-0 min-h-0 flex-1 flex-col">
-      <TabBar v-if="tabs.length" :tabs="tabs" :active-key="activeKey" @select="selectTab" @close="closeTab" />
+      <TabBar v-if="tabs.length" :tabs="tabs" :active-key="activeKey" @select="selectTab" @close="closeTab" @reorder="reorderTabs" />
       <template v-if="tabs.length">
         <PluginFrame
           v-for="tab in pluginTabs"

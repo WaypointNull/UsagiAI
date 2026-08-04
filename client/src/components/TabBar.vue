@@ -1,4 +1,5 @@
 <script setup>
+import { ref } from 'vue';
 import { X } from '@lucide/vue';
 
 defineProps({
@@ -6,18 +7,61 @@ defineProps({
   activeKey: { type: String, default: null }
 });
 
-const emit = defineEmits(['select', 'close']);
+const emit = defineEmits(['select', 'close', 'reorder']);
+
+const dragIndex = ref(null);
+const overIndex = ref(null);
+
+function onDragStart(index, event) {
+  dragIndex.value = index;
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(index));
+  }
+}
+
+function onDragOver(index, event) {
+  if (dragIndex.value === null) {
+    return;
+  }
+  event.preventDefault();
+  overIndex.value = index;
+}
+
+function onDrop(index) {
+  const from = dragIndex.value;
+  dragIndex.value = null;
+  overIndex.value = null;
+  if (from === null || from === index) {
+    return;
+  }
+  emit('reorder', from, index);
+}
+
+function onDragEnd() {
+  dragIndex.value = null;
+  overIndex.value = null;
+}
 </script>
 
 <template>
   <div class="theme-transition flex items-stretch border-b border-border bg-card text-sm">
     <button
-      v-for="tab in tabs"
+      v-for="(tab, index) in tabs"
       :key="tab.key"
       type="button"
+      draggable="true"
       class="group flex max-w-56 items-center gap-2 border-r border-border px-4 py-2 transition-colors"
-      :class="tab.key === activeKey ? 'bg-accent text-accent-foreground' : 'bg-card text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground'"
+      :class="[
+        tab.key === activeKey ? 'bg-accent text-accent-foreground' : 'bg-card text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground',
+        dragIndex === index ? 'opacity-40' : '',
+        overIndex === index && dragIndex !== null && dragIndex !== index ? 'ring-2 ring-inset ring-ring' : ''
+      ]"
       @click="emit('select', tab.key)"
+      @dragstart="onDragStart(index, $event)"
+      @dragover="onDragOver(index, $event)"
+      @drop.prevent="onDrop(index)"
+      @dragend="onDragEnd"
     >
       <span class="truncate">{{ tab.label }}</span>
       <X
