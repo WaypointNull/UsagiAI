@@ -1,5 +1,5 @@
 const path = require('path');
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, Menu } = require('electron');
 const { createHub } = require('./hub');
 
 let hub = null;
@@ -14,6 +14,8 @@ async function bootstrap() {
     pluginsDir: path.join(__dirname, '..', 'plugins'),
     dataDir: path.join(app.getPath('userData'), 'history')
   });
+
+  Menu.setApplicationMenu(null);
 
   win = new BrowserWindow({
     width: 1440,

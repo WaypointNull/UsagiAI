@@ -22,5 +22,8 @@ export const api = {
   },
   stop(id) {
     return request(`/api/plugins/${id}/stop`, { method: 'POST' });
+  },
+  history() {
+    return request('/api/history');
   }
 };

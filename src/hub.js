@@ -270,6 +270,35 @@ class PluginManager {
       })
       .filter(Boolean);
   }
+
+  readAllHistory() {
+    const root = path.join(this.dataDir, 'history');
+    if (!fs.existsSync(root)) {
+      return [];
+    }
+    return fs
+      .readdirSync(root)
+      .map((pluginId) => {
+        const dir = path.join(root, pluginId);
+        if (!fs.statSync(dir).isDirectory()) {
+          return null;
+        }
+        const runtime = this.plugins.get(pluginId);
+        const schemas = fs
+          .readdirSync(dir)
+          .filter((file) => file.endsWith('.jsonl'))
+          .map((file) => {
+            const schema = file.slice(0, -'.jsonl'.length);
+            return { schema, records: this.readHistory(pluginId, schema) };
+          });
+        return {
+          plugin: pluginId,
+          name: (runtime && runtime.manifest.name) || pluginId,
+          schemas
+        };
+      })
+      .filter(Boolean);
+  }
 }
 
 function createHub(options = {}) {
@@ -301,6 +330,10 @@ function createHub(options = {}) {
     } catch (error) {
       res.status(500).json({ ok: false, error: error.message });
     }
+  });
+
+  app.get('/api/history', (_req, res) => {
+    res.json({ ok: true, history: manager.readAllHistory() });
   });
 
   // --- hub bus (loopback, token-protected) ---
