@@ -1,0 +1,10 @@
+# Akumu is its own git repository (https://github.com/WaypointNull/Akumu)
+Akumu/
+
+# Local working notes and data (e.g. data/PLAN.md) — not committed
+data/
+
+node_modules/
+dist/
+release/
+*.log
