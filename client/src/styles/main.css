@@ -46,25 +46,25 @@
   --radius: 0.625rem;
   color-scheme: dark;
 
-  --background: 348 20% 5%;
-  --foreground: 340 15% 94%;
-  --card: 348 18% 8%;
-  --card-foreground: 340 15% 94%;
-  --popover: 348 18% 8%;
-  --popover-foreground: 340 15% 94%;
-  --primary: 348 100% 82%;
-  --primary-foreground: 348 62% 15%;
-  --secondary: 340 12% 16%;
-  --secondary-foreground: 340 15% 90%;
-  --muted: 340 12% 15%;
-  --muted-foreground: 340 8% 62%;
-  --accent: 340 14% 18%;
-  --accent-foreground: 340 15% 92%;
+  --background: 0 0% 7%;
+  --foreground: 0 0% 93%;
+  --card: 0 0% 10%;
+  --card-foreground: 0 0% 93%;
+  --popover: 0 0% 10%;
+  --popover-foreground: 0 0% 93%;
+  --primary: 0 0% 85%;
+  --primary-foreground: 0 0% 10%;
+  --secondary: 0 0% 15%;
+  --secondary-foreground: 0 0% 90%;
+  --muted: 0 0% 14%;
+  --muted-foreground: 0 0% 60%;
+  --accent: 0 0% 16%;
+  --accent-foreground: 0 0% 92%;
   --destructive: 0 72% 62%;
   --destructive-foreground: 0 0% 98%;
-  --border: 340 14% 18%;
-  --input: 340 14% 20%;
-  --ring: 348 100% 80%;
+  --border: 0 0% 17%;
+  --input: 0 0% 19%;
+  --ring: 0 0% 80%;
 }
 
 @theme inline {
@@ -93,6 +93,15 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+@layer components {
+  .theme-transition {
+    transition:
+      background-color 1s ease-in,
+      border-color 1s ease-in,
+      color 1s ease-in;
+  }
+}
+
 @layer base {
   * {
     border-color: hsl(var(--border));
@@ -109,6 +118,9 @@
     min-height: 100vh;
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
+    transition:
+      background-color 1s ease-in,
+      color 1s ease-in;
   }
 
   ::selection {

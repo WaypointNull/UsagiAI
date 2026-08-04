@@ -79,7 +79,8 @@ class PluginManager {
       version: p.manifest.version,
       status: p.status,
       url: p.url,
-      exitInfo: p.exitInfo
+      exitInfo: p.exitInfo,
+      theme: p.manifest.theme || null
     }));
   }
 

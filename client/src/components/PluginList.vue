@@ -23,7 +23,7 @@ function statusVariant(status) {
 </script>
 
 <template>
-  <aside class="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto border-r border-border bg-card p-4">
+  <aside class="theme-transition flex w-64 shrink-0 flex-col gap-2 overflow-y-auto border-r border-border bg-card p-4">
     <div class="mb-1 flex items-center gap-2">
       <h1 class="text-lg font-semibold tracking-wide">UsagiAI</h1>
       <Badge class="ml-auto" variant="secondary">hub</Badge>

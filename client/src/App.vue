@@ -1,12 +1,20 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { api } from './api';
+import { applyTheme, DEFAULT_THEME } from './theme';
 import PluginList from './components/PluginList.vue';
 import PluginFrame from './components/PluginFrame.vue';
 
 const plugins = ref([]);
 const active = ref(null);
 let timer = null;
+
+const activeTheme = computed(() => {
+  const plugin = plugins.value.find((p) => p.id === active.value?.id);
+  return (plugin && plugin.theme && plugin.theme.tokens) || DEFAULT_THEME;
+});
+
+watch(activeTheme, (tokens) => applyTheme(tokens), { immediate: true });
 
 async function refresh() {
   try {
@@ -59,7 +67,7 @@ onUnmounted(() => clearInterval(timer));
   <div class="flex h-screen w-screen overflow-hidden">
     <PluginList :plugins="plugins" :active-id="active && active.id" @toggle="toggle" @show="show" />
     <PluginFrame v-if="active" :plugin="active" @close="active = null" />
-    <div v-else class="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+    <div v-else class="theme-transition flex flex-1 items-center justify-center text-sm text-muted-foreground">
       Select a tool from the sidebar.
     </div>
   </div>

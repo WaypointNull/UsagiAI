@@ -9,8 +9,8 @@ const emit = defineEmits(['close']);
 </script>
 
 <template>
-  <main class="flex min-w-0 flex-1 flex-col">
-    <div class="flex items-center gap-2 border-b border-border bg-card px-4 py-2 text-xs text-muted-foreground">
+  <main class="theme-transition flex min-w-0 flex-1 flex-col">
+    <div class="theme-transition flex items-center gap-2 border-b border-border bg-card px-4 py-2 text-xs text-muted-foreground">
       <span class="font-medium text-foreground">{{ plugin.name }}</span>
       <span class="truncate">{{ plugin.url }}</span>
       <button
