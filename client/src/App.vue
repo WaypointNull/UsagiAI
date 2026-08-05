@@ -195,8 +195,9 @@ onUnmounted(() => clearInterval(timer));
           <HistoryPanel v-if="historyTabOpen" v-show="activeKey === 'history'" />
           <StorePanel v-if="storeTabOpen" v-show="activeKey === 'store'" @installed="refresh" />
         </template>
-        <div v-else class="theme-transition flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          Select a tool from the sidebar.
+        <div v-else class="theme-transition flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+          <img src="/UsagiAI.png" alt="UsagiAI" class="w-44 select-none opacity-30" draggable="false" />
+          <span>Select a tool from the sidebar.</span>
         </div>
       </div>
     </div>

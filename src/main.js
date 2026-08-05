@@ -23,6 +23,7 @@ async function bootstrap() {
     minWidth: 960,
     minHeight: 640,
     title: 'UsagiAI',
+    icon: path.join(__dirname, '..', 'client', 'public', 'icon.png'),
     backgroundColor: '#0e0d18',
     webPreferences: {
       contextIsolation: true,

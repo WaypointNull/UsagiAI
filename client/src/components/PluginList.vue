@@ -43,13 +43,13 @@ function actionTitle(status) {
 
 <template>
   <aside class="theme-transition flex w-64 shrink-0 flex-col border-r border-border bg-card">
-    <div class="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
-      <div class="mb-1 flex items-center gap-2">
-        <h1 class="text-lg font-semibold tracking-wide">UsagiAI</h1>
-        <Badge class="ml-auto" variant="secondary">hub</Badge>
-      </div>
-      <Separator class="bg-primary" />
+    <div class="flex items-center gap-2 p-4 pb-3">
+      <h1 class="text-lg font-semibold tracking-wide">UsagiAI</h1>
+      <Badge class="ml-auto" variant="secondary">hub</Badge>
+    </div>
+    <Separator class="w-full bg-primary" />
 
+    <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4">
       <div
         v-for="plugin in plugins"
         :key="plugin.id"
