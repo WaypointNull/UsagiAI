@@ -2,8 +2,10 @@
 import { computed, onMounted, ref } from 'vue';
 import { api } from '../api';
 import { renderMarkdown } from '../lib/markdown';
+import { setActivity, clearActivity } from '../lib/activity';
 import Button from './ui/Button.vue';
 import Badge from './ui/Badge.vue';
+import AlertDialog from './ui/AlertDialog.vue';
 import { RefreshCw, Trash2, Wrench } from '@lucide/vue';
 
 const emit = defineEmits(['installed']);
@@ -143,12 +145,17 @@ async function selectRepo(owner, repo) {
   }
 }
 
-async function runAction(key, fn) {
+function progressFor(key) {
+  return (message, progress) => setActivity(key, message, progress);
+}
+
+async function runAction(key, label, fn) {
   if (busyKey.value) {
     return;
   }
   busyKey.value = key;
   error.value = '';
+  setActivity(key, label);
   try {
     await fn();
     emit('installed');
@@ -157,6 +164,7 @@ async function runAction(key, fn) {
     error.value = e.message;
   } finally {
     busyKey.value = null;
+    clearActivity(key);
   }
 }
 
@@ -164,29 +172,45 @@ async function install() {
   if (!detail.value) {
     return;
   }
-  await runAction(selectedRepo.value, async () => {
+  const key = selectedRepo.value;
+  await runAction(key, installed.value ? 'Updating plugin…' : 'Installing plugin…', async () => {
     const [owner, repo] = selectedRepo.value.split('/');
     if (installed.value) {
-      await api.updateRepo(owner, repo, selectedTag.value);
+      await api.updateRepo(owner, repo, selectedTag.value, progressFor(key));
     } else {
-      await api.installRepo(owner, repo, selectedTag.value);
+      await api.installRepo(owner, repo, selectedTag.value, progressFor(key));
     }
   });
 }
 
 async function quickUpdate(owner, repo) {
-  await runAction(`${owner}/${repo}:update`, () => api.updateRepo(owner, repo));
+  const key = `${owner}/${repo}:update`;
+  await runAction(key, `Updating ${repo}…`, () => api.updateRepo(owner, repo, undefined, progressFor(key)));
 }
 
 async function repair(owner, repo) {
-  await runAction(`${owner}/${repo}:repair`, () => api.repairRepo(owner, repo));
+  const key = `${owner}/${repo}:repair`;
+  await runAction(key, `Repairing ${repo}…`, () => api.repairRepo(owner, repo, progressFor(key)));
 }
 
-async function uninstall(owner, repo) {
-  if (!window.confirm(`Uninstall ${repo}? The plugin files will be removed.`)) {
+const uninstallTarget = ref(null);
+const uninstallOpen = ref(false);
+
+function requestUninstall(owner, repo) {
+  uninstallTarget.value = { owner, repo };
+  uninstallOpen.value = true;
+}
+
+async function confirmUninstall() {
+  const target = uninstallTarget.value;
+  uninstallOpen.value = false;
+  if (!target) {
     return;
   }
-  await runAction(`${owner}/${repo}:uninstall`, () => api.uninstallRepo(owner, repo));
+  const key = `${target.owner}/${target.repo}:uninstall`;
+  await runAction(key, `Uninstalling ${target.repo}…`, () =>
+    api.uninstallRepo(target.owner, target.repo, progressFor(key))
+  );
 }
 
 function isRepoBusy(owner, repo) {
@@ -224,7 +248,7 @@ onMounted(loadList);
             <div v-if="r.installed" class="mt-1.5 flex items-center gap-1 border-t border-border pt-1.5">
               <button
                 v-if="r.updateAvailable"
-                class="flex h-6 flex-1 cursor-pointer items-center justify-center gap-1 rounded border border-border bg-background text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+                class="flex h-6 flex-1 cursor-pointer items-center justify-center gap-1 rounded border border-border bg-background text-xs text-muted-foreground transition-all duration-150 hover:bg-accent hover:text-accent-foreground active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50"
                 :disabled="isRepoBusy(r.owner, r.repo)"
                 title="Quick update to latest"
                 @click.stop="quickUpdate(r.owner, r.repo)"
@@ -233,7 +257,7 @@ onMounted(loadList);
                 Update
               </button>
               <button
-                class="flex h-6 flex-1 cursor-pointer items-center justify-center gap-1 rounded border border-border bg-background text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+                class="flex h-6 flex-1 cursor-pointer items-center justify-center gap-1 rounded border border-border bg-background text-xs text-muted-foreground transition-all duration-150 hover:bg-accent hover:text-accent-foreground active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50"
                 :disabled="isRepoBusy(r.owner, r.repo)"
                 title="Repair (reinstall current version)"
                 @click.stop="repair(r.owner, r.repo)"
@@ -242,10 +266,10 @@ onMounted(loadList);
                 Repair
               </button>
               <button
-                class="flex h-6 flex-1 cursor-pointer items-center justify-center gap-1 rounded border border-border bg-background text-xs text-muted-foreground transition-colors hover:bg-destructive hover:text-destructive-foreground disabled:pointer-events-none disabled:opacity-50"
+                class="flex h-6 flex-1 cursor-pointer items-center justify-center gap-1 rounded border border-border bg-background text-xs text-muted-foreground transition-all duration-150 hover:bg-destructive hover:text-destructive-foreground active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50"
                 :disabled="isRepoBusy(r.owner, r.repo)"
                 title="Uninstall"
-                @click.stop="uninstall(r.owner, r.repo)"
+                @click.stop="requestUninstall(r.owner, r.repo)"
               >
                 <Trash2 :size="12" />
                 Uninstall
@@ -331,5 +355,13 @@ onMounted(loadList);
 
       <div v-else class="flex flex-1 items-center justify-center text-sm text-muted-foreground">Loading…</div>
     </div>
+    <AlertDialog
+      v-model:open="uninstallOpen"
+      :title="`Uninstall ${uninstallTarget ? uninstallTarget.repo : ''}?`"
+      description="The plugin files will be removed and the plugin will be closed."
+      confirm-label="Uninstall"
+      destructive
+      @confirm="confirmUninstall"
+    />
   </main>
 </template>

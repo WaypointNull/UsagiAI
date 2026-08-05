@@ -2,7 +2,7 @@
 import Button from './ui/Button.vue';
 import Badge from './ui/Badge.vue';
 import Separator from './ui/Separator.vue';
-import { History, Play, Square, Store } from '@lucide/vue';
+import { Bot, History, Loader2, Play, Square, Store } from '@lucide/vue';
 
 defineProps({
   plugins: { type: Array, default: () => [] },
@@ -22,6 +22,23 @@ function statusVariant(status) {
   }
   return 'secondary';
 }
+
+function statusLabel(status) {
+  if (status === 'starting') {
+    return 'initializing';
+  }
+  return status;
+}
+
+function actionTitle(status) {
+  if (status === 'running') {
+    return 'Close';
+  }
+  if (status === 'starting') {
+    return 'Interrupt';
+  }
+  return 'Open';
+}
 </script>
 
 <template>
@@ -31,7 +48,7 @@ function statusVariant(status) {
         <h1 class="text-lg font-semibold tracking-wide">UsagiAI</h1>
         <Badge class="ml-auto" variant="secondary">hub</Badge>
       </div>
-      <Separator />
+      <Separator class="bg-primary" />
 
       <div
         v-for="plugin in plugins"
@@ -40,11 +57,22 @@ function statusVariant(status) {
         :class="plugin.id === activeId ? 'border-ring bg-accent' : 'border-border bg-background hover:bg-accent/50'"
         @click="emit('show', plugin)"
       >
+        <img v-if="plugin.icon" :src="plugin.icon" alt="" class="h-4 w-4 shrink-0 rounded-sm object-contain" />
+        <Bot v-else :size="16" class="shrink-0 text-muted-foreground" />
         <span class="min-w-0 flex-1 truncate font-medium">{{ plugin.name }}</span>
-        <Badge :variant="statusVariant(plugin.status)" class="capitalize">{{ plugin.status }}</Badge>
-        <Button size="icon" variant="ghost" class="h-7 w-7" :title="plugin.status === 'running' ? 'Close' : 'Open'" @click.stop="emit('toggle', plugin)">
-          <Play v-if="plugin.status !== 'running'" :size="14" />
-          <Square v-else :size="14" />
+        <Badge :variant="statusVariant(plugin.status)" class="capitalize">
+          <Loader2 v-if="plugin.status === 'starting'" :size="12" class="animate-spin" />
+          {{ statusLabel(plugin.status) }}
+        </Badge>
+        <Button
+          size="icon"
+          variant="ghost"
+          class="h-7 w-7"
+          :title="actionTitle(plugin.status)"
+          @click.stop="emit('toggle', plugin)"
+        >
+          <Square v-if="plugin.status === 'running' || plugin.status === 'starting'" :size="14" />
+          <Play v-else :size="14" />
         </Button>
       </div>
 

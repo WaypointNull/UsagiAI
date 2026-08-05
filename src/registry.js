@@ -393,18 +393,23 @@ class Registry {
     return { manifest, copyName };
   }
 
-  async runBuild(pluginDir, manifest) {
+  async runBuild(pluginDir, manifest, onProgress) {
     const steps = manifest.build && manifest.build.steps;
+    const progress = onProgress || (() => {});
     if (!Array.isArray(steps) || steps.length === 0) {
       return;
     }
-    for (const step of steps) {
+    const base = 0.4;
+    const span = 0.55;
+    for (let i = 0; i < steps.length; i += 1) {
+      const step = steps[i];
       const command = step && step.command;
       if (!Array.isArray(command) || command.length === 0 || !command.every((c) => typeof c === 'string')) {
         throw createError(`invalid build step in ${path.basename(pluginDir)}`, 'build');
       }
       const cwd = path.resolve(pluginDir, step.cwd || '.');
       const commandLine = command.map((part) => (/\s/.test(part) ? `"${part}"` : part)).join(' ');
+      progress(`Build step ${i + 1}/${steps.length}: ${commandLine}`, base + (span * i) / steps.length);
       log(`building ${path.basename(pluginDir)}: ${commandLine}`);
       await new Promise((resolve, reject) => {
         const proc = spawn(commandLine, { cwd, shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -433,6 +438,7 @@ class Registry {
           }
         });
       });
+      progress(`Finished build step ${i + 1}/${steps.length}`, base + (span * (i + 1)) / steps.length);
     }
   }
 
@@ -453,10 +459,12 @@ class Registry {
     return null;
   }
 
-  async install({ owner, repo, tag }) {
+  async install({ owner, repo, tag, onProgress }) {
+    const progress = onProgress || (() => {});
     if (this.state.repos[repo]) {
       throw createError(`${repo} is already installed; use update or repair`, 'alreadyInstalled');
     }
+    progress('Fetching releases', 0.05);
     let releases;
     try {
       releases = await this.fetchReleases(owner, repo);
@@ -479,24 +487,28 @@ class Registry {
         throw createError(`no release of ${repo} contains a plugin.json yet`, 'compatibility');
       }
     }
+    progress(`Downloading ${selected.tag}`, 0.15);
     let cacheDir;
     try {
       cacheDir = await this.ensureRepo({ owner, repo, tag: selected.tag });
     } catch (error) {
       throw classifyError(error);
     }
+    progress('Preparing files', 0.3);
     try {
       this.resolvePluginFolder(cacheDir, repo);
     } catch {
       throw createError(`release ${selected.tag} of ${repo} has no plugin.json; try a different version`, 'compatibility');
     }
     const { manifest, copyName } = await this.copyToPlugins({ repo, cacheDir, tag: selected.tag });
+    progress('Installing files', 0.4);
     try {
-      await this.runBuild(path.join(this.pluginsDir, copyName), manifest);
+      await this.runBuild(path.join(this.pluginsDir, copyName), manifest, onProgress);
     } catch (error) {
       fs.rmSync(path.join(this.pluginsDir, copyName), { recursive: true, force: true });
       throw error;
     }
+    progress('Finalizing', 0.98);
 
     const duplicateFolders = this.findDuplicateFolders(manifest.id, copyName);
     this.state.repos[repo] = {
@@ -518,11 +530,13 @@ class Registry {
     };
   }
 
-  async update({ owner, repo, tag }) {
+  async update({ owner, repo, tag, onProgress }) {
+    const progress = onProgress || (() => {});
     const existing = this.state.repos[repo];
     if (!existing) {
       throw createError(`${owner}/${repo} is not installed`, 'notInstalled');
     }
+    progress('Fetching releases', 0.05);
     let releases;
     try {
       releases = await this.fetchReleases(owner, repo);
@@ -554,14 +568,18 @@ class Registry {
         plugin: { id: existing.pluginId, name: existing.pluginName, version: existing.tag }
       };
     }
+    progress(`Downloading ${selected.tag}`, 0.15);
     const cacheDir = await this.ensureRepo({ owner, repo, tag: selected.tag });
+    progress('Preparing files', 0.3);
     const { manifest, copyName } = await this.copyToPlugins({ repo, cacheDir, tag: selected.tag });
+    progress('Installing files', 0.4);
     try {
-      await this.runBuild(path.join(this.pluginsDir, copyName), manifest);
+      await this.runBuild(path.join(this.pluginsDir, copyName), manifest, onProgress);
     } catch (error) {
       fs.rmSync(path.join(this.pluginsDir, copyName), { recursive: true, force: true });
       throw error;
     }
+    progress('Finalizing', 0.98);
     this.state.repos[repo] = {
       ...existing,
       tag: selected.tag,
@@ -578,24 +596,29 @@ class Registry {
     };
   }
 
-  async repair({ owner, repo }) {
+  async repair({ owner, repo, onProgress }) {
+    const progress = onProgress || (() => {});
     const existing = this.state.repos[repo];
     if (!existing) {
       throw createError(`${owner}/${repo} is not installed`, 'notInstalled');
     }
+    progress(`Restoring ${existing.tag}`, 0.15);
     let cacheDir;
     try {
       cacheDir = await this.ensureRepo({ owner, repo, tag: existing.tag });
     } catch (error) {
       throw classifyError(error);
     }
+    progress('Preparing files', 0.3);
     const { manifest, copyName } = await this.copyToPlugins({ repo, cacheDir, tag: existing.tag });
+    progress('Installing files', 0.4);
     try {
-      await this.runBuild(path.join(this.pluginsDir, copyName), manifest);
+      await this.runBuild(path.join(this.pluginsDir, copyName), manifest, onProgress);
     } catch (error) {
       fs.rmSync(path.join(this.pluginsDir, copyName), { recursive: true, force: true });
       throw error;
     }
+    progress('Finalizing', 0.98);
     this.state.repos[repo] = {
       ...existing,
       pluginId: manifest.id,

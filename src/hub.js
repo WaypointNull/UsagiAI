@@ -21,6 +21,17 @@ function sendError(res, error) {
   res.status(500).json({ ok: false, error: error.message, reason: error.reason || null });
 }
 
+function streamJson(res) {
+  res.set('content-type', 'application/x-ndjson');
+  const write = (payload) => res.write(JSON.stringify(payload) + '\n');
+  return {
+    progress: (message, progress) => write({ type: 'progress', message, progress: progress === undefined ? null : progress }),
+    done: (payload) => res.end(JSON.stringify({ type: 'done', ok: true, ...payload }) + '\n'),
+    fail: (error) =>
+      res.end(JSON.stringify({ type: 'error', ok: false, error: error.message, reason: error.reason || null }) + '\n')
+  };
+}
+
 function pickFreePort() {
   return new Promise((resolve, reject) => {
     const probe = net.createServer();
@@ -32,20 +43,23 @@ function pickFreePort() {
   });
 }
 
-function waitForUrl(url, timeoutMs) {
+function waitForUrl(url, timeoutMs, signal) {
   const deadline = Date.now() + timeoutMs;
   return new Promise((resolve, reject) => {
     const tick = async () => {
+      if (signal && signal.aborted) {
+        return reject(new Error('start interrupted'));
+      }
       if (Date.now() > deadline) {
         return reject(new Error(`timed out waiting for ${url}`));
       }
       try {
-        const res = await fetch(url);
+        const res = await fetch(url, { signal });
         if (res.ok) {
           return resolve();
         }
       } catch {
-        // not up yet
+        // not up yet or aborted
       }
       setTimeout(tick, 250);
     };
@@ -134,8 +148,33 @@ class PluginManager {
       exitInfo: p.exitInfo,
       theme: p.manifest.theme || null,
       io: p.manifest.io || null,
-      sdkReady: p.sdkReady
+      sdkReady: p.sdkReady,
+      icon: this.findIcon(p.manifest.id) ? `/api/plugins/${p.manifest.id}/icon` : null
     }));
+  }
+
+  findIcon(id) {
+    const runtime = this.plugins.get(id);
+    if (!runtime) {
+      return null;
+    }
+    const candidates = [];
+    if (typeof runtime.manifest.icon === 'string' && runtime.manifest.icon) {
+      candidates.push(runtime.manifest.icon);
+    }
+    for (const ext of ['png', 'svg', 'jpg', 'jpeg', 'webp']) {
+      candidates.push(`client/public/${id}.${ext}`);
+      candidates.push(`icon.${ext}`);
+      candidates.push(`${id}.${ext}`);
+      candidates.push(`assets/icon.${ext}`);
+    }
+    for (const rel of candidates) {
+      const abs = path.resolve(runtime.dir, rel);
+      if (abs.startsWith(runtime.dir + path.sep) && fs.existsSync(abs) && fs.statSync(abs).isFile()) {
+        return abs;
+      }
+    }
+    return null;
   }
 
   async start(id) {
@@ -143,7 +182,7 @@ class PluginManager {
     if (!runtime) {
       throw new Error(`unknown plugin: ${id}`);
     }
-    if (runtime.status === 'running') {
+    if (runtime.status === 'running' || runtime.status === 'starting') {
       return runtime;
     }
 
@@ -175,6 +214,8 @@ class PluginManager {
     runtime.stderr = '';
     runtime.exitInfo = null;
     runtime.sdkReady = false;
+    const controller = new AbortController();
+    runtime.startAbort = controller;
 
     proc.stderr.on('data', (chunk) => {
       runtime.stderr += chunk;
@@ -183,7 +224,9 @@ class PluginManager {
       runtime.proc = null;
       runtime.port = null;
       runtime.url = null;
-      if (runtime.status !== 'stopping') {
+      const aborted = Boolean(runtime.startAbort && runtime.startAbort.signal.aborted);
+      runtime.startAbort = null;
+      if (runtime.status !== 'stopping' && !aborted) {
         runtime.status = 'crashed';
       } else {
         runtime.status = 'stopped';
@@ -194,8 +237,14 @@ class PluginManager {
 
     const healthPath = runtime.manifest.health?.path || '/api/health';
     try {
-      await waitForUrl(runtime.url + healthPath, 180000);
+      await waitForUrl(runtime.url + healthPath, 180000, controller.signal);
     } catch (error) {
+      if (controller.signal.aborted) {
+        if (runtime.status === 'starting') {
+          runtime.status = 'stopping';
+        }
+        return runtime;
+      }
       runtime.status = 'crashed';
       runtime.exitInfo = { error: error.message, stderr: runtime.stderr.slice(-2000) };
       proc.kill();
@@ -203,6 +252,7 @@ class PluginManager {
     }
 
     runtime.status = 'running';
+    runtime.startAbort = null;
     log(`${id} is healthy at ${runtime.url}`);
     return runtime;
   }
@@ -216,6 +266,9 @@ class PluginManager {
       runtime.status = 'stopped';
       return;
     }
+    if (runtime.status === 'starting' && runtime.startAbort) {
+      runtime.startAbort.abort();
+    }
     log(`stopping ${id}`);
     runtime.status = 'stopping';
     const proc = runtime.proc;
@@ -226,13 +279,19 @@ class PluginManager {
     runtime.status = 'stopped';
   }
 
-  stopAll() {
+  async stopAll() {
+    const exits = [];
     for (const runtime of this.plugins.values()) {
       if (runtime.proc) {
         runtime.status = 'stopping';
-        runtime.proc.kill();
+        const proc = runtime.proc;
+        proc.kill();
+        if (proc.exitCode === null) {
+          exits.push(new Promise((resolve) => proc.once('exit', resolve)));
+        }
       }
     }
+    await Promise.all(exits);
   }
 
   async remove(id) {
@@ -305,6 +364,35 @@ class PluginManager {
       })
       .filter(Boolean);
   }
+
+  deleteRecord(pluginId, schema, recordId) {
+    const file = path.join(this.dataDir, 'history', pluginId, `${schema}.jsonl`);
+    if (!fs.existsSync(file)) {
+      return { removed: false };
+    }
+    const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
+    const next = lines.filter((line) => {
+      try {
+        return JSON.parse(line).id !== recordId;
+      } catch {
+        return true;
+      }
+    });
+    if (next.length === lines.length) {
+      return { removed: false };
+    }
+    fs.writeFileSync(file, next.length ? next.join('\n') + '\n' : '');
+    return { removed: true };
+  }
+
+  clearSchema(pluginId, schema) {
+    const file = path.join(this.dataDir, 'history', pluginId, `${schema}.jsonl`);
+    if (!fs.existsSync(file)) {
+      return { removed: false };
+    }
+    fs.rmSync(file, { force: true });
+    return { removed: true };
+  }
 }
 
 function createHub(options = {}) {
@@ -361,68 +449,82 @@ function createHub(options = {}) {
   });
 
   app.post('/api/repos/:owner/:repo/install', async (req, res) => {
+    const stream = streamJson(res);
     try {
       const result = await registry.install({
         owner: req.params.owner,
         repo: req.params.repo,
-        tag: (req.body && req.body.tag) || undefined
+        tag: (req.body && req.body.tag) || undefined,
+        onProgress: stream.progress
       });
       manager.scan();
-      res.json({ ok: true, ...result });
+      stream.done(result);
     } catch (error) {
-      sendError(res, error);
+      stream.fail(error);
     }
   });
 
   app.post('/api/repos/:owner/:repo/update', async (req, res) => {
+    const stream = streamJson(res);
     try {
       const record = registry.state.repos[req.params.repo];
       if (record && record.pluginId) {
+        stream.progress(`Stopping ${req.params.repo}…`, 0.1);
         await manager.stop(record.pluginId);
       }
       const result = await registry.update({
         owner: req.params.owner,
         repo: req.params.repo,
-        tag: (req.body && req.body.tag) || undefined
+        tag: (req.body && req.body.tag) || undefined,
+        onProgress: stream.progress
       });
       manager.scan();
-      res.json({ ok: true, ...result });
+      stream.done(result);
     } catch (error) {
-      sendError(res, error);
+      stream.fail(error);
     }
   });
 
   app.post('/api/repos/:owner/:repo/repair', async (req, res) => {
+    const stream = streamJson(res);
     try {
       const record = registry.state.repos[req.params.repo];
       if (record && record.pluginId) {
+        stream.progress(`Stopping ${req.params.repo}…`, 0.1);
         await manager.stop(record.pluginId);
       }
       const result = await registry.repair({
         owner: req.params.owner,
-        repo: req.params.repo
+        repo: req.params.repo,
+        onProgress: stream.progress
       });
       manager.scan();
-      res.json({ ok: true, ...result });
+      stream.done(result);
     } catch (error) {
-      sendError(res, error);
+      stream.fail(error);
     }
   });
 
   app.post('/api/repos/:owner/:repo/uninstall', async (req, res) => {
+    const stream = streamJson(res);
     try {
       const record = registry.state.repos[req.params.repo];
+      if (record && record.pluginId) {
+        stream.progress(`Closing ${req.params.repo}…`, 0.3);
+        await manager.stop(record.pluginId);
+      }
+      stream.progress(`Uninstalling ${req.params.repo}…`, 0.7);
       const result = await registry.uninstall({
         owner: req.params.owner,
         repo: req.params.repo
       });
       if (record && record.pluginId) {
-        await manager.remove(record.pluginId);
+        manager.plugins.delete(record.pluginId);
       }
       manager.scan();
-      res.json({ ok: true, ...result });
+      stream.done(result);
     } catch (error) {
-      sendError(res, error);
+      stream.fail(error);
     }
   });
 
@@ -452,6 +554,42 @@ function createHub(options = {}) {
 
   app.get('/api/history', (_req, res) => {
     res.json({ ok: true, history: manager.readAllHistory() });
+  });
+
+  app.delete('/api/history/:plugin/:schema/:id', (req, res) => {
+    try {
+      res.json({ ok: true, ...manager.deleteRecord(req.params.plugin, req.params.schema, req.params.id) });
+    } catch (error) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  app.delete('/api/history/:plugin/:schema', (req, res) => {
+    try {
+      res.json({ ok: true, ...manager.clearSchema(req.params.plugin, req.params.schema) });
+    } catch (error) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  const ICON_TYPES = {
+    '.png': 'image/png',
+    '.svg': 'image/svg+xml',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp'
+  };
+
+  app.get('/api/plugins/:id/icon', (req, res) => {
+    const abs = manager.findIcon(req.params.id);
+    if (!abs) {
+      res.status(404).json({ ok: false, error: 'no icon for this plugin' });
+      return;
+    }
+    const ext = path.extname(abs).toLowerCase();
+    res.set('content-type', ICON_TYPES[ext] || 'application/octet-stream');
+    res.set('cache-control', 'public, max-age=3600');
+    res.sendFile(abs);
   });
 
   // --- hub bus (loopback, token-protected) ---
@@ -512,8 +650,8 @@ function createHub(options = {}) {
         port: HUB_PORT,
         manager,
         server,
-        stopAll: () => {
-          manager.stopAll();
+        stopAll: async () => {
+          await manager.stopAll();
           server.close();
         }
       });

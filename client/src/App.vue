@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { api } from './api';
 import { applyTheme, DEFAULT_THEME } from './theme';
+import { activity } from './lib/activity';
 import PluginList from './components/PluginList.vue';
 import PluginFrame from './components/PluginFrame.vue';
 import HistoryPanel from './components/HistoryPanel.vue';
@@ -59,7 +60,7 @@ async function refresh() {
 
 async function toggle(plugin) {
   try {
-    if (plugin.status === 'running') {
+    if (plugin.status === 'running' || plugin.status === 'starting') {
       await api.stop(plugin.id);
       closeTab(`plugin:${plugin.id}`);
     } else {
@@ -72,6 +73,33 @@ async function toggle(plugin) {
     refresh();
   }
 }
+
+const runningCount = computed(() => plugins.value.filter((p) => p.status === 'running').length);
+
+const statusActivity = computed(() => {
+  if (activity.key) {
+    return { label: activity.label, progress: activity.progress };
+  }
+  const starting = plugins.value.find((p) => p.status === 'starting');
+  if (starting) {
+    return { label: `Initializing ${starting.name}…`, progress: null };
+  }
+  return null;
+});
+
+const activeLabel = computed(() => {
+  if (!activeKey.value) {
+    return '';
+  }
+  if (activeKey.value === 'store') {
+    return 'Store';
+  }
+  if (activeKey.value === 'history') {
+    return 'History';
+  }
+  const tab = tabs.value.find((t) => t.key === activeKey.value);
+  return tab ? tab.label : '';
+});
 
 function show(plugin) {
   if (plugin.status === 'running') {
@@ -143,32 +171,52 @@ onUnmounted(() => clearInterval(timer));
 </script>
 
 <template>
-  <div class="flex h-screen w-screen overflow-hidden">
-    <PluginList
-      :plugins="plugins"
-      :active-id="activePluginId"
-      :history-active="activeKey === 'history'"
-      :store-active="activeKey === 'store'"
-      @toggle="toggle"
-      @show="show"
-      @history="openHistory"
-      @store="openStore"
-    />
-    <div class="flex min-w-0 min-h-0 flex-1 flex-col">
-      <TabBar v-if="tabs.length" :tabs="tabs" :active-key="activeKey" @select="selectTab" @close="closeTab" @reorder="reorderTabs" />
-      <template v-if="tabs.length">
-        <PluginFrame
-          v-for="tab in pluginTabs"
-          :key="tab.key"
-          v-show="tab.key === activeKey"
-          :plugin="tab"
-        />
-        <HistoryPanel v-if="historyTabOpen" v-show="activeKey === 'history'" />
-        <StorePanel v-if="storeTabOpen" v-show="activeKey === 'store'" @installed="refresh" />
-      </template>
-      <div v-else class="theme-transition flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Select a tool from the sidebar.
+  <div class="flex h-screen w-screen flex-col overflow-hidden">
+    <div class="flex min-h-0 flex-1 overflow-hidden">
+      <PluginList
+        :plugins="plugins"
+        :active-id="activePluginId"
+        :history-active="activeKey === 'history'"
+        :store-active="activeKey === 'store'"
+        @toggle="toggle"
+        @show="show"
+        @history="openHistory"
+        @store="openStore"
+      />
+      <div class="flex min-w-0 min-h-0 flex-1 flex-col">
+        <TabBar v-if="tabs.length" :tabs="tabs" :active-key="activeKey" @select="selectTab" @close="closeTab" @reorder="reorderTabs" />
+        <template v-if="tabs.length">
+          <PluginFrame
+            v-for="tab in pluginTabs"
+            :key="tab.key"
+            v-show="tab.key === activeKey"
+            :plugin="tab"
+          />
+          <HistoryPanel v-if="historyTabOpen" v-show="activeKey === 'history'" />
+          <StorePanel v-if="storeTabOpen" v-show="activeKey === 'store'" @installed="refresh" />
+        </template>
+        <div v-else class="theme-transition flex flex-1 items-center justify-center text-sm text-muted-foreground">
+          Select a tool from the sidebar.
+        </div>
       </div>
     </div>
+    <footer class="flex h-7 shrink-0 items-center gap-3 border-t border-primary/40 bg-primary/15 px-3 text-xs font-medium text-foreground">
+      <span class="font-semibold text-primary">UsagiAI</span>
+      <template v-if="statusActivity">
+        <span class="truncate">{{ statusActivity.label }}</span>
+        <div class="h-1 w-36 shrink-0 overflow-hidden rounded-full bg-primary/25">
+          <div
+            v-if="statusActivity.progress !== null"
+            class="h-full rounded-full bg-primary transition-[width] duration-300"
+            :style="{ width: `${Math.max(4, statusActivity.progress * 100)}%` }"
+          />
+          <div v-else class="h-full w-2/5 rounded-full bg-primary animate-indeterminate" />
+        </div>
+      </template>
+      <template v-else>
+        <span>{{ runningCount }}/{{ plugins.length }} plugins running</span>
+      </template>
+      <span v-if="activeLabel" class="ml-auto truncate">{{ activeLabel }}</span>
+    </footer>
   </div>
 </template>
