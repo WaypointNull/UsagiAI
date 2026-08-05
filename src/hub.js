@@ -68,9 +68,10 @@ function waitForUrl(url, timeoutMs, signal) {
 }
 
 class PluginManager {
-  constructor({ pluginsDir, dataDir }) {
+  constructor({ pluginsDir, dataDir, sdkPath }) {
     this.pluginsDir = pluginsDir;
     this.dataDir = dataDir;
+    this.sdkPath = sdkPath || DEFAULT_SDK_PATH;
     this.plugins = new Map();
   }
 
@@ -202,7 +203,7 @@ class PluginManager {
         AKUMU_DATA_DIR: dataDir,
         USAGI_HUB_URL: `http://127.0.0.1:${HUB_PORT}`,
         USAGI_PLUGIN_TOKEN: runtime.token,
-        USAGI_SDK_PATH: DEFAULT_SDK_PATH
+        USAGI_SDK_PATH: this.sdkPath
       },
       stdio: ['ignore', 'pipe', 'pipe']
     });
@@ -398,7 +399,8 @@ class PluginManager {
 function createHub(options = {}) {
   const manager = new PluginManager({
     pluginsDir: options.pluginsDir || DEFAULT_PLUGINS_DIR,
-    dataDir: options.dataDir || DEFAULT_DATA_DIR
+    dataDir: options.dataDir || DEFAULT_DATA_DIR,
+    sdkPath: options.sdkPath
   });
   const registry = new Registry({
     pluginsDir: manager.pluginsDir,

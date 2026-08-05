@@ -1,6 +1,6 @@
 {
   "name": "usagi-ai",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Local hub for AI plugins.",
   "main": "src/main.js",
@@ -12,7 +12,10 @@
     "dev": "electron .",
     "build": "vite build --config client/vite.config.mjs",
     "preview": "vite preview --config client/vite.config.mjs",
-    "client:dev": "vite --config client/vite.config.mjs"
+    "client:dev": "vite --config client/vite.config.mjs",
+    "desktop:dist": "npm run build && electron-builder --win",
+    "desktop:portable": "npm run build && electron-builder --win portable",
+    "desktop:publish": "npm run build && electron-builder --win --publish always"
   },
   "dependencies": {
     "@lucide/vue": "^1.28.0",
@@ -25,9 +28,64 @@
     "@vitejs/plugin-vue": "^6.0.8",
     "autoprefixer": "^10.5.4",
     "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
     "postcss": "^8.5.25",
     "tailwindcss": "^4.3.3",
     "vite": "^8.2.0",
     "vue": "^3.5.40"
+  },
+  "build": {
+    "appId": "com.waypointnull.usagi",
+    "productName": "UsagiAI",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "sdk/**/*",
+      "client/dist/**/*",
+      "!**/*.test.js",
+      "!**/test/**"
+    ],
+    "asarUnpack": [
+      "sdk/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "UsagiAI",
+      "artifactName": "UsagiAI-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "UsagiAI-Portable-${version}.${ext}",
+      "requestExecutionLevel": "user"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "WaypointNull",
+        "repo": "UsagiAI"
+      }
+    ]
   }
 }

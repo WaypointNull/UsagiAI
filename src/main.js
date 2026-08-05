@@ -10,10 +10,18 @@ function log(...args) {
 }
 
 async function bootstrap() {
-  hub = await createHub({
+  const userData = app.getPath('userData');
+  const options = {
     pluginsDir: path.join(__dirname, '..', 'plugins'),
-    dataDir: path.join(app.getPath('userData'), 'history')
-  });
+    dataDir: path.join(userData, 'history')
+  };
+  if (app.isPackaged) {
+    options.pluginsDir = path.join(userData, 'plugins');
+    options.registryCacheDir = path.join(userData, 'registryCache');
+    options.registryStateFile = path.join(userData, 'plugins.json');
+    options.sdkPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'sdk', 'index.js');
+  }
+  hub = await createHub(options);
 
   Menu.setApplicationMenu(null);
 

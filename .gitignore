@@ -6,7 +6,10 @@ data/
 
 node_modules/
 dist/
+build/*
+!build/icon.png
 release/
+out/
 *.log
 
 # Store state: downloaded repo copies, installed-plugin metadata and copies
