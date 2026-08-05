@@ -1,6 +1,9 @@
 # Akumu is its own git repository (https://github.com/WaypointNull/Akumu)
 Akumu/
 
+# Tsuki is its own git repository (https://github.com/WaypointNull/Tsuki)
+Tsuki/
+
 # Local working notes and data (e.g. data/PLAN.md) — not committed
 data/
 
