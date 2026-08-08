@@ -6,7 +6,9 @@ const { readPluginManifest } = require('./manifest');
 const DEFAULT_CACHE_DIR = path.join(__dirname, 'registryCache');
 const DEFAULT_STATE_FILE = path.join(__dirname, 'plugins.json');
 
+const DEFAULT_REPO_OWNER = 'WaypointNull';
 const DEFAULT_REPOS = [{ owner: 'WaypointNull', repo: 'Akumu' }];
+const DISCOVER_TTL_MS = 5 * 60 * 1000;
 
 const GITHUB_API = 'https://api.github.com';
 const CODELOAD = 'https://codeload.github.com';
@@ -105,6 +107,8 @@ class Registry {
     this.stateFile = stateFile;
     this.state = { repos: {} };
     this.compatCache = new Map();
+    this.discovered = [];
+    this.discoveredAt = 0;
     this.loadState();
   }
 
@@ -185,8 +189,48 @@ class Registry {
     return found;
   }
 
+  async discoverRepos(owner) {
+    if (this.discoveredAt && Date.now() - this.discoveredAt < DISCOVER_TTL_MS) {
+      return this.discovered;
+    }
+    let list = null;
+    try {
+      list = await githubJson(`${GITHUB_API}/users/${owner}/repos?per_page=100&sort=updated`);
+    } catch (error) {
+      if (error && error.reason === 'notFound') {
+        try {
+          list = await githubJson(`${GITHUB_API}/orgs/${owner}/repos?per_page=100&sort=updated`);
+        } catch {
+          list = null;
+        }
+      } else {
+        log(`discover ${owner} failed: ${error.message}; using cached/fallback list`);
+        return this.discovered;
+      }
+    }
+    const found = [];
+    for (const item of Array.isArray(list) ? list : []) {
+      if (item.fork) {
+        continue;
+      }
+      const ref = item.default_branch || 'main';
+      try {
+        if (await this.hasPluginJson(owner, item.name, ref)) {
+          found.push({ owner, repo: item.name });
+        }
+      } catch {
+        // repo we can't inspect: skip
+      }
+    }
+    this.discovered = found;
+    this.discoveredAt = Date.now();
+    log(`discovered ${found.length} plugin repo(s) under ${owner}`);
+    return found;
+  }
+
   async listRepos() {
     const repos = [];
+    const seen = new Set();
     const withUpdate = async (owner, repo, record) => {
       let latest = null;
       let updateAvailable = false;
@@ -211,11 +255,22 @@ class Registry {
         updateAvailable
       };
     };
-    for (const { owner, repo } of DEFAULT_REPOS) {
+    let seed = DEFAULT_REPOS;
+    try {
+      const discovered = await this.discoverRepos(DEFAULT_REPO_OWNER);
+      if (discovered.length) {
+        seed = discovered;
+      }
+    } catch {
+      // fall back to DEFAULT_REPOS
+    }
+    for (const { owner, repo } of seed) {
+      seen.add(repo);
       repos.push(await withUpdate(owner, repo, this.state.repos[repo] || null));
     }
     for (const [repo, record] of Object.entries(this.state.repos)) {
-      if (!repos.some((r) => r.repo === repo)) {
+      if (!seen.has(repo)) {
+        seen.add(repo);
         repos.push(await withUpdate(record.owner, repo, record));
       }
     }
