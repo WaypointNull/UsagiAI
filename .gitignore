@@ -4,6 +4,9 @@ Akumu/
 # Tsuki is its own git repository (https://github.com/WaypointNull/Tsuki)
 Tsuki/
 
+# Akira is its own git repository (https://github.com/WaypointNull/Akira)
+Akira/
+
 # Local working notes and data (e.g. data/PLAN.md) — not committed
 data/
 
