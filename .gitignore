@@ -7,6 +7,9 @@ Tsuki/
 # Akira is its own git repository (https://github.com/WaypointNull/Akira)
 Akira/
 
+# Intern is its own git repository (https://github.com/WaypointNull/Intern)
+Intern/
+
 # Local working notes and data (e.g. data/PLAN.md) — not committed
 data/
 
