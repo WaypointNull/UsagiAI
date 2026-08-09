@@ -1,6 +1,6 @@
 {
   "name": "usagi-ai",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "description": "Local hub for AI plugins.",
   "license": "WaypointNull Community License v2.0",
