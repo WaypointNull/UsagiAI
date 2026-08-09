@@ -302,7 +302,7 @@ class PluginManager {
     this.plugins.delete(id);
   }
 
-  appendRecord(pluginId, { schema, input, output }) {
+  appendRecord(pluginId, { schema, input, output, folder, source }) {
     if (typeof schema !== 'string' || !schema) {
       throw new Error('schema is required');
     }
@@ -310,10 +310,14 @@ class PluginManager {
       schema,
       id: crypto.randomUUID(),
       plugin: pluginId,
+      folderId: folder || crypto.randomUUID(),
       createdAt: new Date().toISOString(),
       input: input || {},
       output: output || {}
     };
+    if (source) {
+      record.source = source;
+    }
     const file = path.join(this.dataDir, 'history', pluginId, `${schema}.jsonl`);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.appendFileSync(file, JSON.stringify(record) + '\n');
@@ -339,33 +343,104 @@ class PluginManager {
       .filter(Boolean);
   }
 
+  recordFolderId(record) {
+    return record.folderId || record.id;
+  }
+
+  deriveFolder(folderId, records, pluginNames) {
+    const ordered = records.slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const rank = { 'tag-list@1': 0, 'weighted-tag-list@1': 1, 'image@1': 2 };
+    let entry = ordered[0] || null;
+    for (const record of ordered) {
+      const recordRank = rank[record.schema] === undefined ? 3 : rank[record.schema];
+      const entryRank = entry && rank[entry.schema] !== undefined ? rank[entry.schema] : 3;
+      if (recordRank < entryRank || (recordRank === entryRank && record.createdAt < entry.createdAt)) {
+        entry = record;
+      }
+    }
+    const tagList = ordered.find((r) => r.schema === 'tag-list@1');
+    const weighted = ordered.find((r) => r.schema === 'weighted-tag-list@1');
+    const image = ordered.find((r) => r.schema === 'image@1' && r.output && r.output.image);
+    let label = tagList && tagList.input && tagList.input.naturalLanguage;
+    if (!label && weighted) {
+      label =
+        (weighted.output && weighted.output.finalText) ||
+        (Array.isArray(weighted.output && weighted.output.entries)
+          ? weighted.output.entries.map((e) => e.name).join(', ')
+          : '');
+    }
+    return {
+      folderId,
+      label: label || '',
+      thumb: image ? image.output.image : null,
+      entry: entry ? { id: entry.id, plugin: entry.plugin, schema: entry.schema } : null,
+      createdAt: ordered.length ? ordered[0].createdAt : null,
+      updatedAt: ordered.length ? ordered[ordered.length - 1].createdAt : null,
+      records: ordered.map((record) => ({
+        ...record,
+        pluginName: pluginNames.get(record.plugin) || record.plugin
+      }))
+    };
+  }
+
   readAllHistory() {
     const root = path.join(this.dataDir, 'history');
     if (!fs.existsSync(root)) {
       return [];
     }
-    return fs
-      .readdirSync(root)
-      .map((pluginId) => {
-        const dir = path.join(root, pluginId);
-        if (!fs.statSync(dir).isDirectory()) {
-          return null;
+    const pluginNames = new Map();
+    const byFolder = new Map();
+    for (const pluginId of fs.readdirSync(root)) {
+      const dir = path.join(root, pluginId);
+      if (!fs.statSync(dir).isDirectory()) {
+        continue;
+      }
+      const runtime = this.plugins.get(pluginId);
+      pluginNames.set(pluginId, (runtime && runtime.manifest.name) || pluginId);
+      for (const file of fs.readdirSync(dir).filter((name) => name.endsWith('.jsonl'))) {
+        const schema = file.slice(0, -'.jsonl'.length);
+        for (const record of this.readHistory(pluginId, schema)) {
+          const folderId = this.recordFolderId(record);
+          if (!byFolder.has(folderId)) {
+            byFolder.set(folderId, []);
+          }
+          byFolder.get(folderId).push(record);
         }
-        const runtime = this.plugins.get(pluginId);
-        const schemas = fs
-          .readdirSync(dir)
-          .filter((file) => file.endsWith('.jsonl'))
-          .map((file) => {
-            const schema = file.slice(0, -'.jsonl'.length);
-            return { schema, records: this.readHistory(pluginId, schema) };
-          });
-        return {
-          plugin: pluginId,
-          name: (runtime && runtime.manifest.name) || pluginId,
-          schemas
-        };
-      })
-      .filter(Boolean);
+      }
+    }
+    return [...byFolder.entries()]
+      .map(([folderId, records]) => this.deriveFolder(folderId, records, pluginNames))
+      .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+  }
+
+  deleteFolder(folderId) {
+    const root = path.join(this.dataDir, 'history');
+    if (!fs.existsSync(root)) {
+      return { removed: false, count: 0 };
+    }
+    let count = 0;
+    for (const pluginId of fs.readdirSync(root)) {
+      const dir = path.join(root, pluginId);
+      if (!fs.statSync(dir).isDirectory()) {
+        continue;
+      }
+      for (const file of fs.readdirSync(dir).filter((name) => name.endsWith('.jsonl'))) {
+        const filePath = path.join(dir, file);
+        const lines = fs.readFileSync(filePath, 'utf8').split('\n').filter(Boolean);
+        const next = lines.filter((line) => {
+          try {
+            return this.recordFolderId(JSON.parse(line)) !== folderId;
+          } catch {
+            return true;
+          }
+        });
+        if (next.length !== lines.length) {
+          count += lines.length - next.length;
+          fs.writeFileSync(filePath, next.length ? next.join('\n') + '\n' : '');
+        }
+      }
+    }
+    return { removed: count > 0, count };
   }
 
   deleteRecord(pluginId, schema, recordId) {
@@ -557,7 +632,15 @@ function createHub(options = {}) {
   });
 
   app.get('/api/history', (_req, res) => {
-    res.json({ ok: true, history: manager.readAllHistory() });
+    res.json({ ok: true, folders: manager.readAllHistory() });
+  });
+
+  app.delete('/api/history/folder/:folderId', (req, res) => {
+    try {
+      res.json({ ok: true, ...manager.deleteFolder(req.params.folderId) });
+    } catch (error) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
   });
 
   app.delete('/api/history/:plugin/:schema/:id', (req, res) => {
@@ -619,8 +702,8 @@ function createHub(options = {}) {
 
   app.post('/bus/history', (req, res) => {
     try {
-      const { schema, input, output } = req.body || {};
-      const record = manager.appendRecord(req.runtime.manifest.id, { schema, input, output });
+      const { schema, input, output, folder, source } = req.body || {};
+      const record = manager.appendRecord(req.runtime.manifest.id, { schema, input, output, folder, source });
       res.json({ ok: true, record });
     } catch (error) {
       res.status(400).json({ ok: false, error: error.message });

@@ -89,6 +89,9 @@ export const api = {
   clearHistory(plugin, schema) {
     return request(`/api/history/${plugin}/${schema}`, { method: 'DELETE' });
   },
+  deleteFolder(folderId) {
+    return request(`/api/history/folder/${encodeURIComponent(folderId)}`, { method: 'DELETE' });
+  },
   repos() {
     return request('/api/repos');
   },

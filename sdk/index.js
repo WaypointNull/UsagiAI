@@ -29,8 +29,8 @@ async function ready() {
   return request('POST', '/bus/ready');
 }
 
-async function record(schema, { input, output }) {
-  return request('POST', '/bus/history', { schema, input, output });
+async function record(schema, { input, output }, options = {}) {
+  return request('POST', '/bus/history', { schema, input, output, folder: options.folder, source: options.source });
 }
 
 async function history({ plugin, schema }) {
