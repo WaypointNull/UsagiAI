@@ -1,6 +1,6 @@
 {
   "name": "usagi-ai",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "description": "Local hub for AI plugins.",
   "main": "src/main.js",
@@ -19,7 +19,9 @@
   },
   "dependencies": {
     "@lucide/vue": "^1.28.0",
+    "@waypointnull/auto-update": "^1.0.1",
     "clsx": "^2.1.1",
+    "electron-updater": "^6.8.9",
     "express": "^4.21.2",
     "tailwind-merge": "^3.6.0"
   },

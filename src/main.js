@@ -1,5 +1,6 @@
 const path = require('path');
 const { app, BrowserWindow, Menu } = require('electron');
+const { setupAutoUpdate } = require('@waypointnull/auto-update');
 const { createHub } = require('./hub');
 
 let hub = null;
@@ -36,7 +37,8 @@ async function bootstrap() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      preload: path.join(__dirname, 'preload.js')
     }
   });
 
@@ -44,6 +46,8 @@ async function bootstrap() {
   win.on('closed', () => {
     win = null;
   });
+
+  setupAutoUpdate({ onError: (error) => log('auto-update:', (error && error.message) || error) });
 }
 
 app.whenReady()

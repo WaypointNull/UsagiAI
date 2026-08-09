@@ -8,6 +8,7 @@ import PluginFrame from './components/PluginFrame.vue';
 import HistoryPanel from './components/HistoryPanel.vue';
 import StorePanel from './components/StorePanel.vue';
 import TabBar from './components/TabBar.vue';
+import UpdateDialog from './components/UpdateDialog.vue';
 
 const plugins = ref([]);
 const tabs = ref([]);
@@ -219,5 +220,6 @@ onUnmounted(() => clearInterval(timer));
       </template>
       <span v-if="activeLabel" class="ml-auto truncate">{{ activeLabel }}</span>
     </footer>
+    <UpdateDialog />
   </div>
 </template>
