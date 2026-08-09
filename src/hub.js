@@ -199,7 +199,9 @@ class PluginManager {
       cwd,
       env: {
         ...process.env,
+        USAGI_PORT: String(port),
         AKUMU_PORT: String(port),
+        TSUKI_PORT: String(port),
         AKUMU_DATA_DIR: dataDir,
         USAGI_HUB_URL: `http://127.0.0.1:${HUB_PORT}`,
         USAGI_PLUGIN_TOKEN: runtime.token,
