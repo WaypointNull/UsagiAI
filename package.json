@@ -3,6 +3,7 @@
   "version": "1.0.3",
   "private": true,
   "description": "Local hub for AI plugins.",
+  "license": "WaypointNull Community License v2.0",
   "main": "src/main.js",
   "engines": {
     "node": ">=18"

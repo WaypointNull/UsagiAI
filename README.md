@@ -18,7 +18,7 @@
 
 <br>
 
-<div align="center"><img alt="Node" src="https://img.shields.io/badge/node-%3E%3D18-339933?style=for-the-badge" /><img alt="Runtime" src="https://img.shields.io/badge/runtime-Electron%20%2B%20Express%20%2B%20Vue%203-4f5bd5?style=for-the-badge" /><img alt="License" src="https://img.shields.io/badge/license-WaypointNull%20v1.0-2e7d5b?style=for-the-badge" /></div>
+<div align="center"><img alt="Node" src="https://img.shields.io/badge/node-%3E%3D18-339933?style=for-the-badge" /><img alt="Runtime" src="https://img.shields.io/badge/runtime-Electron%20%2B%20Express%20%2B%20Vue%203-4f5bd5?style=for-the-badge" /><img alt="License" src="https://img.shields.io/badge/license-WaypointNull%20v2.0-2e7d5b?style=for-the-badge" /></div>
 <div align="center"><a href="https://buymeacoffee.com/waypointnull"><img alt="Buy me a coffee" src="https://img.shields.io/badge/Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" /></a></div>
 
 ---
@@ -108,13 +108,13 @@ Then makes those records available to other residents later.
 
 More specifically:
 
-* 🧪 **Runs every resident locally.**
-* 🔒 **Keeps each tool isolated** with its own process, port and data directory.
-* 📚 **Stores history** outside the resident itself.
-* 🔄 **Lets tools exchange records** through the local bus.
-* 📦 **Installs and updates** supported WaypointNull projects.
-* 🩹 **Repairs installations** without making you start over.
-* 🖥️ Runs completely locally after setup.
+* ðŸ§ª **Runs every resident locally.**
+* ðŸ”’ **Keeps each tool isolated** with its own process, port and data directory.
+* ðŸ“š **Stores history** outside the resident itself.
+* ðŸ”„ **Lets tools exchange records** through the local bus.
+* ðŸ“¦ **Installs and updates** supported WaypointNull projects.
+* ðŸ©¹ **Repairs installations** without making you start over.
+* ðŸ–¥ï¸ Runs completely locally after setup.
 
 > [!NOTE]
 > Everything runs on your own machine.
@@ -142,31 +142,31 @@ More specifically:
 ```text
 Resident starts.
 
-        │
-        ▼
+        â”‚
+        â–¼
 
 UsagiAI gives it
 a port and data directory.
 
-        │
-        ▼
+        â”‚
+        â–¼
 
 The resident
 does its job.
 
-        │
-        ▼
+        â”‚
+        â–¼
 
 It files a record
 with the hub.
 
-        │
-        ▼
+        â”‚
+        â–¼
 
 The hub archives it.
 
-        │
-        ▼
+        â”‚
+        â–¼
 
 Another resident
 can read it later.
@@ -212,11 +212,11 @@ The planned pipeline looks something like:
 
 ```text
 Akumu (tags)
-        │
-        ▼
+        â”‚
+        â–¼
 Tsuki (tag refinement)
-        │
-        ▼
+        â”‚
+        â–¼
 Akira (image generation)
 ```
 
@@ -481,7 +481,7 @@ Persistent state belongs to the hub.
 
 ## License
 
-WaypointNull Community License v1.0
+WaypointNull Community License v2.0
 
 Use it.
 
